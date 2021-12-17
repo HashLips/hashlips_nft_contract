@@ -19,6 +19,17 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+// [BEGIN] OpenSea interfaces (see: https://github.com/ProjectOpenSea/opensea-creatures/blob/master/contracts/ERC721Tradable.sol)
+contract OwnableDelegateProxy {}
+
+/**
+ * Used to delegate ownership of a contract to another address, to save on unneeded transactions to approve contract use for users
+ */
+contract ProxyRegistry {
+    mapping(address => OwnableDelegateProxy) public proxies;
+}
+// [END] OpenSea interfaces
+
 contract NFT is ERC721, Ownable {
   using Strings for uint256;
 
@@ -40,18 +51,21 @@ contract NFT is ERC721, Ownable {
    */
   using Counters for Counters.Counter;
   Counters.Counter private _nextTokenId;
+  address openSeaProxyRegistryAddress;
 
   constructor(
     string memory _name,
     string memory _symbol,
     string memory _initBaseURI,
-    string memory _initNotRevealedUri
+    string memory _initNotRevealedUri,
+    address _openSeaProxyRegistryAddress
   ) ERC721(_name, _symbol) {
     setBaseURI(_initBaseURI);
     setNotRevealedURI(_initNotRevealedUri);
 
     // Avoid higher gas fee for the first minter by initializing the counter here.
     _nextTokenId.increment();
+    openSeaProxyRegistryAddress = _openSeaProxyRegistryAddress;
   }
 
   // internal
@@ -126,6 +140,51 @@ contract NFT is ERC721, Ownable {
    */
   function totalSupply() external view returns (uint256) {
     return _nextTokenId.current() - 1;
+  }
+
+  /**
+   * Override isApprovedForAll to whitelist user's OpenSea proxy accounts to enable gas-less listings.
+   */
+  function isApprovedForAll(address owner, address operator)
+    override
+    public
+    view
+    returns (bool)
+  {
+    // Whitelist OpenSea proxy contract for easy trading.
+    ProxyRegistry proxyRegistry = ProxyRegistry(openSeaProxyRegistryAddress);
+    if (address(proxyRegistry.proxies(owner)) == operator) {
+      return true;
+    }
+
+    return super.isApprovedForAll(owner, operator);
+  }
+
+  /**
+   * This is used instead of msg.sender as transactions won't be sent by the original token owner, but by OpenSea.
+   */
+  function _msgSender()
+    internal
+    override
+    view
+    returns (address sender)
+  {
+    // See: https://github.com/ProjectOpenSea/opensea-creatures/blob/master/contracts/common/meta-transactions/ContentMixin.sol
+    if (msg.sender == address(this)) {
+      bytes memory array = msg.data;
+      uint256 index = msg.data.length;
+      assembly {
+        // Load the 32 bytes word from memory with the address on the lower 20 bytes, and mask those.
+        sender := and(
+          mload(add(array, index)),
+          0xffffffffffffffffffffffffffffffffffffffff
+        )
+      }
+    } else {
+      sender = payable(msg.sender);
+    }
+
+    return sender;
   }
 
   //only owner
