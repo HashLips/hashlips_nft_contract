@@ -77,6 +77,28 @@ contract NFT is ERC721, Ownable {
     }
   }
 
+  function walletOfOwner(address _owner)
+    public
+    view
+    returns (uint256[] memory)
+  {
+    uint256 ownerTokenCount = balanceOf(_owner);
+    uint256[] memory ownedTokens = new uint256[](ownerTokenCount);
+    uint256 currentTokenIndex = 1;
+
+    for (uint256 i; i < ownerTokenCount; i++) {
+      address currentTokenOwner = ownerOf(currentTokenIndex);
+      
+      if (currentTokenOwner == _owner) {
+        ownedTokens[i] = currentTokenIndex;
+      }
+
+      currentTokenIndex++;
+    }
+
+    return ownedTokens;
+  }
+
   function tokenURI(uint256 tokenId)
     public
     view
