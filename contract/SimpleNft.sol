@@ -15,20 +15,31 @@
 
 pragma solidity >=0.7.0 <0.9.0;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract NFT is ERC721Enumerable, Ownable {
+contract NFT is ERC721, Ownable {
   using Strings for uint256;
 
   string baseURI;
   string public baseExtension = ".json";
   uint256 public cost = 0.05 ether;
-  uint256 public maxSupply = 10000;
+  /*
+   * Always set this to "MAX_SUPPLY + 1", this allows to use a more
+   * effcient counter and have lower gas fees.
+   */
+  uint256 public maxSupply = 10000 + 1; 
   uint256 public maxMintAmount = 20;
   bool public paused = false;
   bool public revealed = false;
   string public notRevealedUri;
+  /*
+   * Using Counters instead of ETC721Enumerable to save gas.
+   * See https://shiny.mirror.xyz/OUampBbIz9ebEicfGnQf5At_ReMHlZy0tB4glb9xQ0E
+   */
+  using Counters for Counters.Counter;
+  Counters.Counter private _nextTokenId;
 
   constructor(
     string memory _name,
@@ -38,6 +49,9 @@ contract NFT is ERC721Enumerable, Ownable {
   ) ERC721(_name, _symbol) {
     setBaseURI(_initBaseURI);
     setNotRevealedURI(_initNotRevealedUri);
+
+    // Avoid higher gas fee for the first minter by initializing the counter here.
+    _nextTokenId.increment();
   }
 
   // internal
@@ -47,32 +61,20 @@ contract NFT is ERC721Enumerable, Ownable {
 
   // public
   function mint(uint256 _mintAmount) public payable {
-    uint256 supply = totalSupply();
+    uint256 nextId = _nextTokenId.current();
     require(!paused);
     require(_mintAmount > 0);
     require(_mintAmount <= maxMintAmount);
-    require(supply + _mintAmount <= maxSupply);
+    require(nextId + _mintAmount <= maxSupply);
 
     if (msg.sender != owner()) {
       require(msg.value >= cost * _mintAmount);
     }
 
     for (uint256 i = 1; i <= _mintAmount; i++) {
-      _safeMint(msg.sender, supply + i);
+      _safeMint(msg.sender, _nextTokenId.current());
+      _nextTokenId.increment();
     }
-  }
-
-  function walletOfOwner(address _owner)
-    public
-    view
-    returns (uint256[] memory)
-  {
-    uint256 ownerTokenCount = balanceOf(_owner);
-    uint256[] memory tokenIds = new uint256[](ownerTokenCount);
-    for (uint256 i; i < ownerTokenCount; i++) {
-      tokenIds[i] = tokenOfOwnerByIndex(_owner, i);
-    }
-    return tokenIds;
   }
 
   function tokenURI(uint256 tokenId)
@@ -88,7 +90,7 @@ contract NFT is ERC721Enumerable, Ownable {
     );
     
     if(revealed == false) {
-        return notRevealedUri;
+      return notRevealedUri;
     }
 
     string memory currentBaseURI = _baseURI();
@@ -97,9 +99,16 @@ contract NFT is ERC721Enumerable, Ownable {
         : "";
   }
 
+  /**
+   * @dev See {IERC721Enumerable-totalSupply}.
+   */
+  function totalSupply() external view returns (uint256) {
+    return _nextTokenId.current() - 1;
+  }
+
   //only owner
   function reveal() public onlyOwner {
-      revealed = true;
+    revealed = true;
   }
   
   function setCost(uint256 _newCost) public onlyOwner {
