@@ -98,13 +98,17 @@ contract NFT is ERC721, Ownable {
   {
     uint256 ownerTokenCount = balanceOf(_owner);
     uint256[] memory ownedTokens = new uint256[](ownerTokenCount);
-    uint256 currentTokenIndex = 1;
+    uint256 currentTokenIndex = 1; // loop through all tokens from 1 to (maxSupply - 1)
+    uint256 ownedTokenIndex = 0; // index for returned array
 
-    for (uint256 i; i < ownerTokenCount; i++) {
+    // Early return if all tokens owned by this address have been found
+    while (ownedTokenIndex < ownerTokenCount && currentTokenIndex < maxSupply) {
       address currentTokenOwner = ownerOf(currentTokenIndex);
       
       if (currentTokenOwner == _owner) {
-        ownedTokens[i] = currentTokenIndex;
+        ownedTokens[ownedTokenIndex] = currentTokenIndex;
+
+        ownedTokenIndex++;
       }
 
       currentTokenIndex++;
