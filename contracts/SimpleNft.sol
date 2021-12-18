@@ -54,7 +54,7 @@ contract NFT is ERC721Enumerable, Ownable {
     require(supply + _mintAmount <= maxSupply);
 
     if (msg.sender != owner()) {
-      require(msg.value >= cost * _mintAmount);
+      require(msg.value >= cost * _mintAmount, "Not enough ETH");
     }
 
     for (uint256 i = 1; i <= _mintAmount; i++) {
@@ -70,7 +70,7 @@ contract NFT is ERC721Enumerable, Ownable {
     uint256 ownerTokenCount = balanceOf(_owner);
     uint256[] memory tokenIds = new uint256[](ownerTokenCount);
     for (uint256 i; i < ownerTokenCount; i++) {
-      tokenIds[i] = tokenOfOwnerByIndex(_owner, i);
+      tokenIds[i] = tokenOfOwnerByIndex(_owner, i) + 1;
     }
     return tokenIds;
   }
