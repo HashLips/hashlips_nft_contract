@@ -15,29 +15,57 @@
 
 pragma solidity >=0.7.0 <0.9.0;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract NFT is ERC721Enumerable, Ownable {
+// [BEGIN] OpenSea interfaces (see: https://github.com/ProjectOpenSea/opensea-creatures/blob/master/contracts/ERC721Tradable.sol)
+contract OwnableDelegateProxy {}
+
+/**
+ * Used to delegate ownership of a contract to another address, to save on unneeded transactions to approve contract use for users
+ */
+contract ProxyRegistry {
+    mapping(address => OwnableDelegateProxy) public proxies;
+}
+// [END] OpenSea interfaces
+
+contract NFT is ERC721, Ownable {
   using Strings for uint256;
 
   string baseURI;
   string public baseExtension = ".json";
   uint256 public cost = 0.05 ether;
-  uint256 public maxSupply = 10000;
+  /*
+   * Always set this to "MAX_SUPPLY + 1", this allows to use a more
+   * effcient counter and have lower gas fees.
+   */
+  uint256 public maxSupply = 10000 + 1; 
   uint256 public maxMintAmount = 20;
   bool public paused = false;
   bool public revealed = false;
   string public notRevealedUri;
+  /*
+   * Using Counters instead of ETC721Enumerable to save gas.
+   * See https://shiny.mirror.xyz/OUampBbIz9ebEicfGnQf5At_ReMHlZy0tB4glb9xQ0E
+   */
+  using Counters for Counters.Counter;
+  Counters.Counter private _nextTokenId;
+  address openSeaProxyRegistryAddress;
 
   constructor(
     string memory _name,
     string memory _symbol,
     string memory _initBaseURI,
-    string memory _initNotRevealedUri
+    string memory _initNotRevealedUri,
+    address _openSeaProxyRegistryAddress
   ) ERC721(_name, _symbol) {
     setBaseURI(_initBaseURI);
     setNotRevealedURI(_initNotRevealedUri);
+
+    // Avoid higher gas fee for the first minter by initializing the counter here.
+    _nextTokenId.increment();
+    openSeaProxyRegistryAddress = _openSeaProxyRegistryAddress;
   }
 
   // internal
@@ -47,18 +75,19 @@ contract NFT is ERC721Enumerable, Ownable {
 
   // public
   function mint(uint256 _mintAmount) public payable {
-    uint256 supply = totalSupply();
+    uint256 nextId = _nextTokenId.current();
     require(!paused);
     require(_mintAmount > 0);
     require(_mintAmount <= maxMintAmount);
-    require(supply + _mintAmount <= maxSupply);
+    require(nextId + _mintAmount <= maxSupply);
 
     if (msg.sender != owner()) {
       require(msg.value >= cost * _mintAmount);
     }
 
     for (uint256 i = 1; i <= _mintAmount; i++) {
-      _safeMint(msg.sender, supply + i);
+      _safeMint(msg.sender, _nextTokenId.current());
+      _nextTokenId.increment();
     }
   }
 
@@ -68,11 +97,24 @@ contract NFT is ERC721Enumerable, Ownable {
     returns (uint256[] memory)
   {
     uint256 ownerTokenCount = balanceOf(_owner);
-    uint256[] memory tokenIds = new uint256[](ownerTokenCount);
-    for (uint256 i; i < ownerTokenCount; i++) {
-      tokenIds[i] = tokenOfOwnerByIndex(_owner, i);
+    uint256[] memory ownedTokens = new uint256[](ownerTokenCount);
+    uint256 currentTokenIndex = 1; // loop through all tokens from 1 to (maxSupply - 1)
+    uint256 ownedTokenIndex = 0; // index for returned array
+
+    // Early return if all tokens owned by this address have been found
+    while (ownedTokenIndex < ownerTokenCount && currentTokenIndex < maxSupply) {
+      address currentTokenOwner = ownerOf(currentTokenIndex);
+      
+      if (currentTokenOwner == _owner) {
+        ownedTokens[ownedTokenIndex] = currentTokenIndex;
+
+        ownedTokenIndex++;
+      }
+
+      currentTokenIndex++;
     }
-    return tokenIds;
+
+    return ownedTokens;
   }
 
   function tokenURI(uint256 tokenId)
@@ -88,7 +130,7 @@ contract NFT is ERC721Enumerable, Ownable {
     );
     
     if(revealed == false) {
-        return notRevealedUri;
+      return notRevealedUri;
     }
 
     string memory currentBaseURI = _baseURI();
@@ -97,9 +139,61 @@ contract NFT is ERC721Enumerable, Ownable {
         : "";
   }
 
+  /**
+   * @dev See {IERC721Enumerable-totalSupply}.
+   */
+  function totalSupply() external view returns (uint256) {
+    return _nextTokenId.current() - 1;
+  }
+
+  /**
+   * Override isApprovedForAll to whitelist user's OpenSea proxy accounts to enable gas-less listings.
+   */
+  function isApprovedForAll(address owner, address operator)
+    override
+    public
+    view
+    returns (bool)
+  {
+    // Whitelist OpenSea proxy contract for easy trading.
+    ProxyRegistry proxyRegistry = ProxyRegistry(openSeaProxyRegistryAddress);
+    if (address(proxyRegistry.proxies(owner)) == operator) {
+      return true;
+    }
+
+    return super.isApprovedForAll(owner, operator);
+  }
+
+  /**
+   * This is used instead of msg.sender as transactions won't be sent by the original token owner, but by OpenSea.
+   */
+  function _msgSender()
+    internal
+    override
+    view
+    returns (address sender)
+  {
+    // See: https://github.com/ProjectOpenSea/opensea-creatures/blob/master/contracts/common/meta-transactions/ContentMixin.sol
+    if (msg.sender == address(this)) {
+      bytes memory array = msg.data;
+      uint256 index = msg.data.length;
+      assembly {
+        // Load the 32 bytes word from memory with the address on the lower 20 bytes, and mask those.
+        sender := and(
+          mload(add(array, index)),
+          0xffffffffffffffffffffffffffffffffffffffff
+        )
+      }
+    } else {
+      sender = payable(msg.sender);
+    }
+
+    return sender;
+  }
+
   //only owner
   function reveal() public onlyOwner {
-      revealed = true;
+    revealed = true;
   }
   
   function setCost(uint256 _newCost) public onlyOwner {
