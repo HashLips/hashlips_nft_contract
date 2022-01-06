@@ -3,14 +3,16 @@
 // Amended by HashLips
 /**
     !Disclaimer!
+
     These contracts have been used to create tutorials,
     and was created for the purpose to teach people
     how to create smart contracts on the blockchain.
     please review this code on your own before using any of
     the following code for production.
-    HashLips will not be liable in any way for the use 
-    of the code. That being said, the code has been tested 
-    to the best of the developers' knowledge to work as intended.
+    The developer will not be responsible or liable for all loss or 
+    damage whatsoever caused by you participating in any way in the 
+    experimental code, whether putting money into the contract or 
+    using the code for your own project.
 */
 
 pragma solidity >=0.7.0 <0.9.0;
