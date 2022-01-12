@@ -38,6 +38,10 @@ contract SimpleNftLowerGas is ERC721, Ownable {
   bool public paused = true;
   bool public revealed = false;
 
+  //Murf vars for presale whitelist
+  bool public presale = true;
+  address[] private whiteList;
+
   constructor() ERC721("NAME", "SYMBOL") {
     setHiddenMetadataUri("ipfs://__CID__/hidden.json");
   }
@@ -55,6 +59,19 @@ contract SimpleNftLowerGas is ERC721, Ownable {
   function mint(uint256 _mintAmount) public payable mintCompliance(_mintAmount) {
     require(!paused, "The contract is paused!");
     require(msg.value >= cost * _mintAmount, "Insufficient funds!");
+
+    if (presale) { //Murf dont allow minting if presale is set and buyer is not in whiteList array
+      bool found = false;
+      for (uint256 i = 0; i < whiteList.length; i++) {
+          if (whiteList[i] == msg.sender) {
+              found = true;
+              break;
+          }
+      }
+      if (!found) {
+          revert("Buyer is not in Whitelist for Pre-Sale");
+      }
+  }
 
     _mintLoop(msg.sender, _mintAmount);
   }
@@ -163,5 +180,33 @@ contract SimpleNftLowerGas is ERC721, Ownable {
 
   function _baseURI() internal view virtual override returns (string memory) {
     return uriPrefix;
+  }
+
+  //Murf new Presale Whitelist functions
+  function getWhiteList() public view onlyOwner returns (address[] memory) {
+      return whiteList;
+  }
+
+  function addToWhiteList(address _addr) public onlyOwner {
+      whiteList.push(_addr);
+  }
+
+  function removeFromWhiteList(address _addr) public onlyOwner {
+      uint256 foundIndex = 0;
+      for (uint256 i = 0; i < whiteList.length; i++) {
+          if (whiteList[i] == _addr) {
+              foundIndex = i;
+              break;
+          }
+      }
+      // Move the last element into the place to delete
+      whiteList[foundIndex] = whiteList[whiteList.length - 1];
+      // Remove the last element
+      whiteList.pop();
+
+  }
+
+  function setPresale(bool _state) public onlyOwner {
+    presale = _state;
   }
 }
