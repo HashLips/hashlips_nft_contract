@@ -3,7 +3,6 @@
 // Amended by HashLips
 /**
     !Disclaimer!
-
     These contracts have been used to create tutorials,
     and was created for the purpose to teach people
     how to create smart contracts on the blockchain.
@@ -33,10 +32,14 @@ contract SimpleNftLowerGas is ERC721, Ownable {
   
   uint256 public cost = 0.01 ether;
   uint256 public maxSupply = 10000;
-  uint256 public maxMintAmountPerTx = 5;
-
+  uint256 public maxMintAmountPerTx = 1;
+  uint256 public nftPerAddressLimit = 1;
+  
   bool public paused = true;
   bool public revealed = false;
+  bool public onlyWhitelisted = true;
+  address[] public whitelistedAddresses;
+  mapping(address => uint256) public addressMintedBalance;
 
   constructor() ERC721("NAME", "SYMBOL") {
     setHiddenMetadataUri("ipfs://__CID__/hidden.json");
@@ -57,6 +60,24 @@ contract SimpleNftLowerGas is ERC721, Ownable {
     require(msg.value >= cost * _mintAmount, "Insufficient funds!");
 
     _mintLoop(msg.sender, _mintAmount);
+
+    if (msg.sender != owner()) {
+        if(onlyWhitelisted == true) {
+            require(isWhitelisted(msg.sender), "user is not whitelisted");
+            uint256 ownerMintedCount = addressMintedBalance[msg.sender];
+            require(ownerMintedCount + _mintAmount <= nftPerAddressLimit, "max NFT per address exceeded");
+        }
+        require(msg.value >= cost * _mintAmount, "insufficient funds");
+    }
+  }
+  
+  function isWhitelisted(address _user) public view returns (bool) {
+    for (uint i = 0; i < whitelistedAddresses.length; i++) {
+      if (whitelistedAddresses[i] == _user) {
+          return true;
+      }
+    }
+    return false;
   }
   
   function mintForAddress(uint256 _mintAmount, address _receiver) public mintCompliance(_mintAmount) onlyOwner {
@@ -114,6 +135,10 @@ contract SimpleNftLowerGas is ERC721, Ownable {
     revealed = _state;
   }
 
+  function setNftPerAddressLimit(uint256 _limit) public onlyOwner {
+    nftPerAddressLimit = _limit;
+  }
+
   function setCost(uint256 _cost) public onlyOwner {
     cost = _cost;
   }
@@ -136,6 +161,15 @@ contract SimpleNftLowerGas is ERC721, Ownable {
 
   function setPaused(bool _state) public onlyOwner {
     paused = _state;
+  }
+
+  function setOnlyWhitelisted(bool _state) public onlyOwner {
+    onlyWhitelisted = _state;
+  }
+  
+  function whitelistUsers(address[] calldata _users) public onlyOwner {
+    delete whitelistedAddresses;
+    whitelistedAddresses = _users;
   }
 
   function withdraw() public onlyOwner {
