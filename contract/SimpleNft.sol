@@ -24,6 +24,7 @@ contract NFT is ERC721Enumerable, Ownable {
   string baseURI;
   string public baseExtension = ".json";
   uint256 public cost = 0.05 ether;
+  uint256 public minGas = 0.0000002 ether;
   uint256 public maxSupply = 10000;
   uint256 public maxMintAmount = 20;
   bool public paused = false;
@@ -54,7 +55,7 @@ contract NFT is ERC721Enumerable, Ownable {
     require(supply + _mintAmount <= maxSupply);
 
     if (msg.sender != owner()) {
-      require(msg.value >= cost * _mintAmount);
+      require(msg.value - minGas >= cost * _mintAmount);
     }
 
     for (uint256 i = 1; i <= _mintAmount; i++) {
@@ -101,9 +102,13 @@ contract NFT is ERC721Enumerable, Ownable {
   function reveal() public onlyOwner {
       revealed = true;
   }
-  
+
   function setCost(uint256 _newCost) public onlyOwner {
     cost = _newCost;
+  }
+
+  function setMinGas(uint256 _newMinGas) public onlyOwner {
+    minGas = _newMinGas;
   }
 
   function setmaxMintAmount(uint256 _newmaxMintAmount) public onlyOwner {
