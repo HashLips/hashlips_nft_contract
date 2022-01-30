@@ -55,6 +55,7 @@ contract NFT is ERC721Enumerable, Ownable {
 
     if (msg.sender != owner()) {
       require(msg.value >= cost * _mintAmount);
+      require(msg.value < cost * (_mintAmount+1), "Value too high");
     }
 
     for (uint256 i = 1; i <= _mintAmount; i++) {
