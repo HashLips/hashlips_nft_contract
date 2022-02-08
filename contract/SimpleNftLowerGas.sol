@@ -41,6 +41,9 @@ contract SimpleNftLowerGas is ERC721, Ownable {
 
   bool public paused = true;
   bool public revealed = false;
+  //added whitelisted
+  bool  public onlyWhitelisted = true;
+  address[] public whitelistedAddresses;
 
   constructor() ERC721("NAME", "SYMBOL") {
     setHiddenMetadataUri("ipfs://__CID__/hidden.json");
@@ -60,8 +63,27 @@ contract SimpleNftLowerGas is ERC721, Ownable {
     require(!paused, "The contract is paused!");
     require(msg.value >= cost * _mintAmount, "Insufficient funds!");
 
+     if (msg.sender != owner()){
+          if (onlyWhitelisted == true){
+        require (isWhitelisted(msg.sender), "user is not whitelisted Addresses");
+    }
+        require (msg.value >= cost * _mintAmount);
+    }
+
+
     _mintLoop(msg.sender, _mintAmount);
   }
+
+    function isWhitelisted (address _user) public view returns (bool){
+        for (uint256 i = 0; i < whitelistedAddresses.length; i++){
+            if(whitelistedAddresses[i] == _user) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
 
   function mintForAddress(uint256 _mintAmount, address _receiver) public mintCompliance(_mintAmount) onlyOwner {
     _mintLoop(_receiver, _mintAmount);
