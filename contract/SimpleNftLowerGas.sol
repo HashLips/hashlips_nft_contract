@@ -9,9 +9,9 @@
     how to create smart contracts on the blockchain.
     please review this code on your own before using any of
     the following code for production.
-    The developer will not be responsible or liable for all loss or 
-    damage whatsoever caused by you participating in any way in the 
-    experimental code, whether putting money into the contract or 
+    The developer will not be responsible or liable for all loss or
+    damage whatsoever caused by you participating in any way in the
+    experimental code, whether putting money into the contract or
     using the code for your own project.
 */
 
@@ -27,16 +27,23 @@ contract SimpleNftLowerGas is ERC721, Ownable {
 
   Counters.Counter private supply;
 
+  //this wallet will get a share  when withdraw is called (HASHLIPS)
+  address public sharePayee =0x943590A42C27D08e3744202c4Ae5eD55c2dE240D;
+
   string public uriPrefix = "";
   string public uriSuffix = ".json";
   string public hiddenMetadataUri;
-  
+  //this is the sharePercent payable
+  uint8 public sharePercent = 20;
   uint256 public cost = 0.01 ether;
   uint256 public maxSupply = 10000;
   uint256 public maxMintAmountPerTx = 5;
 
   bool public paused = true;
   bool public revealed = false;
+  //added whitelisted
+  bool  public onlyWhitelisted = true;
+  address[] public whitelistedAddresses;
 
   constructor() ERC721("NAME", "SYMBOL") {
     setHiddenMetadataUri("ipfs://__CID__/hidden.json");
@@ -56,9 +63,28 @@ contract SimpleNftLowerGas is ERC721, Ownable {
     require(!paused, "The contract is paused!");
     require(msg.value >= cost * _mintAmount, "Insufficient funds!");
 
+     if (msg.sender != owner()){
+          if (onlyWhitelisted == true){
+        require (isWhitelisted(msg.sender), "user is not whitelisted Addresses");
+    }
+        require (msg.value >= cost * _mintAmount);
+    }
+
+
     _mintLoop(msg.sender, _mintAmount);
   }
-  
+
+    function isWhitelisted (address _user) public view returns (bool){
+        for (uint256 i = 0; i < whitelistedAddresses.length; i++){
+            if(whitelistedAddresses[i] == _user) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+
   function mintForAddress(uint256 _mintAmount, address _receiver) public mintCompliance(_mintAmount) onlyOwner {
     _mintLoop(_receiver, _mintAmount);
   }
@@ -137,12 +163,19 @@ contract SimpleNftLowerGas is ERC721, Ownable {
   function setPaused(bool _state) public onlyOwner {
     paused = _state;
   }
+  //added for shared wallet and percentage of share
+ function setShareAddress(address _sharePayee) public onlyOwner {
+   sharePayee = _sharePayee;
+ }
+ function setSharePercent(uint8 _sharePercent) public onlyOwner {
+   sharePercent = _sharePercent;
+ }
 
   function withdraw() public onlyOwner {
-    // This will pay HashLips 5% of the initial sale.
+    // This will pay HashLips(sharePayee) a percentage(sharePercent) of the initial sale.
     // You can remove this if you want, or keep it in to support HashLips and his channel.
     // =============================================================================
-    (bool hs, ) = payable(0x943590A42C27D08e3744202c4Ae5eD55c2dE240D).call{value: address(this).balance * 5 / 100}("");
+    (bool hs, ) = payable(sharePayee).call{value: address(this).balance * sharePercent / 100}("");
     require(hs);
     // =============================================================================
 
